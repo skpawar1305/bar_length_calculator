@@ -8,7 +8,7 @@ class RectangleBarLengthCalculator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Rectangle Bar Length Calculator',
+      title: 'Bar Length Calculator in Rectangular Slab',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -52,7 +52,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Rectangle Bar Length Calculator'),
+        title: Text('Bar Length Calculator in Rectangular Slab'),
       ),
       body: Center(
         child: Column(
