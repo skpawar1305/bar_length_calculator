@@ -39,6 +39,9 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
   void _updateValues() {
     setState(() {
+      if (length < 0 || breadth < 0 || spacing < 0) {
+        return;
+      }
       barsX = (length / spacing) * breadth;
       barsY = (breadth / spacing) * length;
       totalBarsLength = barsX + barsY;
@@ -57,8 +60,13 @@ class _CalculatorPageState extends State<CalculatorPage> {
           children: <Widget>[
             SizedBox(height: 20),
             CustomPaint(
-              size: Size(300, 200),
-              painter: RectanglePainter(length: length, breadth: breadth, spacing: spacing),
+              size: Size(300, 150), // Fixed width of 300 and max height of 150
+              painter: RectanglePainter(
+                length: length,
+                breadth: breadth,
+                spacing: spacing,
+                totalBarsLength: totalBarsLength,
+              ),
             ),
             SizedBox(height: 20),
             Padding(
@@ -117,8 +125,14 @@ class RectanglePainter extends CustomPainter {
   final double length;
   final double breadth;
   final double spacing;
+  final double totalBarsLength;
 
-  RectanglePainter({required this.length, required this.breadth, required this.spacing});
+  RectanglePainter({
+    required this.length,
+    required this.breadth,
+    required this.spacing,
+    required this.totalBarsLength,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -127,14 +141,35 @@ class RectanglePainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
+    // Calculate aspect ratio
     final aspectRatio = length / breadth;
-    final scaleWidth = size.width - 20;
-    final scaleHeight = scaleWidth / aspectRatio;
 
-    final rect = Rect.fromLTWH(10, 10, scaleWidth, scaleHeight);
+    // Calculate the scaling factor for width and height
+    final widthFactor = (size.width - 20) / length; // Leave some padding
+    final heightFactor = (size.height - 20) / breadth; // Leave some padding
+
+    // Choose the smaller scaling factor to ensure the rectangle fits
+    final scaleFactor = widthFactor < heightFactor ? widthFactor : heightFactor;
+
+    // Scale width and height proportionally
+    final scaleWidth = length * scaleFactor;
+    final scaleHeight = breadth * scaleFactor;
+
+    // Draw the rectangle centered in the canvas
+    final offsetX = (size.width - scaleWidth) / 2;
+    final offsetY = (size.height - scaleHeight) / 2;
+    final rect = Rect.fromLTWH(offsetX, offsetY, scaleWidth, scaleHeight);
     canvas.drawRect(rect, paint);
 
-    _drawBars(canvas, rect, size);
+    if (length > 0 && breadth > 0 && spacing >= 0.001 && totalBarsLength < 100000) {
+      _drawBars(canvas, rect, size);
+    } else {
+      // Fill the rectangle if the conditions are not met
+      final fillPaint = Paint()
+        ..color = Colors.black.withOpacity(0.3) // Choose a fill color with some transparency
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(rect, fillPaint);
+    }
   }
 
   void _drawBars(Canvas canvas, Rect rect, Size size) {
@@ -142,14 +177,20 @@ class RectanglePainter extends CustomPainter {
       ..color = Colors.grey
       ..strokeWidth = 0.5;
 
+    // Calculate the maximum number of bars based on the available space
+    int maxBarsX = (rect.height / (spacing * rect.height / breadth)).floor();
+    int maxBarsY = (rect.width / (spacing * rect.width / length)).floor();
+
     // Bars along X-axis
-    for (double i = rect.left; i <= rect.right; i += spacing * rect.width / length) {
-      canvas.drawLine(Offset(i, rect.top), Offset(i, rect.bottom), barPaint);
+    for (int i = 0; i <= maxBarsX; i++) {
+      double y = rect.top + i * (spacing * rect.height / breadth);
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), barPaint);
     }
 
     // Bars along Y-axis
-    for (double i = rect.top; i <= rect.bottom; i += spacing * rect.height / breadth) {
-      canvas.drawLine(Offset(rect.left, i), Offset(rect.right, i), barPaint);
+    for (int i = 0; i <= maxBarsY; i++) {
+      double x = rect.left + i * (spacing * rect.width / length);
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), barPaint);
     }
   }
 
