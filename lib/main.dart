@@ -1,23 +1,33 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(RectangleBarLengthCalculator());
 }
 
 class RectangleBarLengthCalculator extends StatelessWidget {
+  const RectangleBarLengthCalculator({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Bar Length Calculator in Rectangular Slab',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0), // Override system font scaling
+      child: MaterialApp(
+        title: 'Bar Length Calculator in Rectangular Slab',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+        ),
+        home: const CalculatorPage(),
       ),
-      home: CalculatorPage(),
     );
   }
 }
 
 class CalculatorPage extends StatefulWidget {
+  const CalculatorPage({super.key});
+
   @override
   _CalculatorPageState createState() => _CalculatorPageState();
 }
@@ -25,74 +35,175 @@ class CalculatorPage extends StatefulWidget {
 class _CalculatorPageState extends State<CalculatorPage> {
   double length = 58.2;
   double breadth = 5.2;
-  double spacing = 0.25;
+  double spacingX = 0.25;
+  double spacingY = 0.25;
+  bool useSeparateSpacing = false;
 
+  double density = 7850.0; // Steel density in kg/m³
+  double diameter = 8.0; // Default diameter in mm
   double barsX = 0.0;
   double barsY = 0.0;
   double totalBarsLength = 0.0;
+  double totalWeight = 0.0;
 
   @override
   void initState() {
     super.initState();
+    _loadPersistentValues();
     _updateValues();
+  }
+
+  Future<void> _loadPersistentValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      density = prefs.getDouble('density') ?? density;
+      diameter = prefs.getDouble('diameter') ?? diameter;
+      length = prefs.getDouble('length') ?? length;
+      breadth = prefs.getDouble('breadth') ?? breadth;
+      spacingX = prefs.getDouble('spacingX') ?? spacingX;
+      spacingY = prefs.getDouble('spacingY') ?? spacingY;
+      useSeparateSpacing = prefs.getBool('useSeparateSpacing') ?? useSeparateSpacing;
+    });
+  }
+
+  Future<void> _savePersistentValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('density', density);
+    await prefs.setDouble('diameter', diameter);
+    await prefs.setDouble('length', length);
+    await prefs.setDouble('breadth', breadth);
+    await prefs.setDouble('spacingX', spacingX);
+    await prefs.setDouble('spacingY', spacingY);
+    await prefs.setBool('useSeparateSpacing', useSeparateSpacing);
   }
 
   void _updateValues() {
     setState(() {
-      if (length < 0 || breadth < 0 || spacing < 0) {
+      if (length < 0 || breadth < 0 || spacingX < 0 || spacingY < 0) {
         return;
       }
-      barsX = (length / spacing) * breadth;
-      barsY = (breadth / spacing) * length;
+      barsX = (length / spacingX) * breadth;
+      barsY = (breadth / spacingY) * length;
       totalBarsLength = barsX + barsY;
+
+      // Calculate weight (π * d² / 4) * length * density
+      final radius = diameter / 1000 / 2; // Convert diameter to meters
+      final area = pi * radius * radius; // Cross-sectional area in m²
+      totalWeight = area * totalBarsLength * density;
+
+      // Save values persistently
+      _savePersistentValues();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Bar Length Calculator in Rectangular Slab'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            SizedBox(height: 20),
-            CustomPaint(
-              size: Size(300, 150), // Fixed width of 300 and max height of 150
-              painter: RectanglePainter(
-                length: length,
-                breadth: breadth,
-                spacing: spacing,
-                totalBarsLength: totalBarsLength,
-              ),
+    return GestureDetector(
+      onTap: () {
+        // Unfocus the text field when tapping outside
+        FocusScopeNode currentFocus = FocusScope.of(context);
+        if (!currentFocus.hasPrimaryFocus && currentFocus.focusedChild != null) {
+          currentFocus.unfocus();
+        }
+      },
+      child: Scaffold(
+        body: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: <Widget>[
+                const SizedBox(height: 5),
+                CustomPaint(
+                  size: const Size(300, 150),
+                  painter: RectanglePainter(
+                    length: length,
+                    breadth: breadth,
+                    spacingX: spacingX,
+                    spacingY: spacingY,
+                    useSeparateSpacing: useSeparateSpacing,
+                    totalBarsLength: totalBarsLength,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      _buildNumberInput('Length (m):', length, (value) {
+                        length = value;
+                        _updateValues();
+                      }),
+                      _buildNumberInput('Breadth (m):', breadth, (value) {
+                        breadth = value;
+                        _updateValues();
+                      }),
+                      SwitchListTile(
+                        title: const Text('Use separate spacing for X and Y'),
+                        value: useSeparateSpacing,
+                        onChanged: (value) {
+                          setState(() {
+                            useSeparateSpacing = value;
+                            _updateValues();
+                          });
+                        },
+                      ),
+                      if (useSeparateSpacing)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: _buildNumberInput('Spacing X (m):', spacingX, (value) {
+                                spacingX = value;
+                                _updateValues();
+                              }),
+                            ),
+                            SizedBox(width: 10), // Add spacing between the inputs
+                            Flexible(
+                              child: _buildNumberInput('Spacing Y (m):', spacingY, (value) {
+                                spacingY = value;
+                                _updateValues();
+                              }),
+                            ),
+                          ],
+                        )
+                      else
+                        _buildNumberInput('Spacing (m):', spacingX, (value) {
+                          spacingX = value;
+                          spacingY = value;
+                          _updateValues();
+                        }),
+                      _buildNumberInput('Density (kg/m³):', density, (value) {
+                        density = value;
+                        _updateValues();
+                      }),
+                      DropdownButton<double>(
+                        value: diameter,
+                        items: [8.0, 10.0].map((value) {
+                          return DropdownMenuItem(
+                            value: value,
+                            child: Text('$value mm'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              diameter = value;
+                              _updateValues();
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Text('Bars on X-axis: ${barsX.toStringAsFixed(2)} m'),
+                      Text('Bars on Y-axis: ${barsY.toStringAsFixed(2)} m'),
+                      Text('Total length required: ${totalBarsLength.toStringAsFixed(2)} m'),
+                      Text('Total weight: ${totalWeight.toStringAsFixed(2)} kg'),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  _buildNumberInput('Length (m):', length, (value) {
-                    length = value;
-                    _updateValues();
-                  }),
-                  _buildNumberInput('Breadth (m):', breadth, (value) {
-                    breadth = value;
-                    _updateValues();
-                  }),
-                  _buildNumberInput('Spacing (m):', spacing, (value) {
-                    spacing = value;
-                    _updateValues();
-                  }),
-                  SizedBox(height: 10),
-                  Text('Bars on X-axis: ${barsX.toStringAsFixed(2)} m'),
-                  Text('Bars on Y-axis: ${barsY.toStringAsFixed(2)} m'),
-                  Text('Total length required: ${totalBarsLength.toStringAsFixed(2)} m'),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -115,7 +226,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
             }
           },
         ),
-        SizedBox(height: 10),
+        const SizedBox(height: 10),
       ],
     );
   }
@@ -124,13 +235,17 @@ class _CalculatorPageState extends State<CalculatorPage> {
 class RectanglePainter extends CustomPainter {
   final double length;
   final double breadth;
-  final double spacing;
+  final double spacingX;
+  final double spacingY;
+  final bool useSeparateSpacing;
   final double totalBarsLength;
 
   RectanglePainter({
     required this.length,
     required this.breadth,
-    required this.spacing,
+    required this.spacingX,
+    required this.spacingY,
+    required this.useSeparateSpacing,
     required this.totalBarsLength,
   });
 
@@ -141,56 +256,42 @@ class RectanglePainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    // Calculate aspect ratio
     final aspectRatio = length / breadth;
-
-    // Calculate the scaling factor for width and height
-    final widthFactor = (size.width - 20) / length; // Leave some padding
-    final heightFactor = (size.height - 20) / breadth; // Leave some padding
-
-    // Choose the smaller scaling factor to ensure the rectangle fits
+    final widthFactor = (size.width - 20) / length;
+    final heightFactor = (size.height - 20) / breadth;
     final scaleFactor = widthFactor < heightFactor ? widthFactor : heightFactor;
-
-    // Scale width and height proportionally
     final scaleWidth = length * scaleFactor;
     final scaleHeight = breadth * scaleFactor;
 
-    // Draw the rectangle centered in the canvas
     final offsetX = (size.width - scaleWidth) / 2;
     final offsetY = (size.height - scaleHeight) / 2;
     final rect = Rect.fromLTWH(offsetX, offsetY, scaleWidth, scaleHeight);
     canvas.drawRect(rect, paint);
 
-    if (length > 0 && breadth > 0 && spacing >= 0.001 && totalBarsLength < 100000) {
-      _drawBars(canvas, rect, size);
-    } else {
+    if (totalBarsLength > 1000) {
       // Fill the rectangle if the conditions are not met
       final fillPaint = Paint()
         ..color = Colors.black.withOpacity(0.3) // Choose a fill color with some transparency
         ..style = PaintingStyle.fill;
       canvas.drawRect(rect, fillPaint);
-    }
-  }
-
-  void _drawBars(Canvas canvas, Rect rect, Size size) {
-    final barPaint = Paint()
-      ..color = Colors.grey
-      ..strokeWidth = 0.5;
-
-    // Calculate the maximum number of bars based on the available space
-    int maxBarsX = (rect.height / (spacing * rect.height / breadth)).floor();
-    int maxBarsY = (rect.width / (spacing * rect.width / length)).floor();
-
-    // Bars along X-axis
-    for (int i = 0; i <= maxBarsX; i++) {
-      double y = rect.top + i * (spacing * rect.height / breadth);
-      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), barPaint);
+      return;
     }
 
-    // Bars along Y-axis
-    for (int i = 0; i <= maxBarsY; i++) {
-      double x = rect.left + i * (spacing * rect.width / length);
-      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), barPaint);
+    if (length > 0 && breadth > 0) {
+      final spacingXFactor = useSeparateSpacing ? spacingX : spacingX;
+      final spacingYFactor = useSeparateSpacing ? spacingY : spacingX;
+
+      for (double y = rect.top;
+          y <= rect.bottom;
+          y += spacingYFactor * rect.height / breadth) {
+        canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+      }
+
+      for (double x = rect.left;
+          x <= rect.right;
+          x += spacingXFactor * rect.width / length) {
+        canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+      }
     }
   }
 
